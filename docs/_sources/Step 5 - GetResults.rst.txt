@@ -1,0 +1,173 @@
+Step 5 - GetResults
+===============================
+ 
+
+Code execution 
+------------------------
+
+.. code-block:: console
+
+   python GetResults.py (DirectoryName in which files will be stored)
+   For example: python GetResults.py 1
+    
+
+Actual Code in GetResults
+----------------------------------------
+
+
+.. code-block:: console
+
+   import pandas as pd
+   import sys
+   import os
+   import glob
+   import shutil
+   import sys
+   import numpy as np
+   import scipy as sp
+   from scipy import stats
+   import matplotlib.pyplot as plt
+   from sklearn.metrics import roc_auc_score
+   import math
+   import matplotlib.pyplot as plt
+   import numpy as np
+   import scipy.stats as stats
+   import math
+   import matplotlib.pyplot as plt
+   from scipy.stats import norm
+   import statistics
+   import seaborn as sns
+
+
+   direc = sys.argv[1]
+
+ 
+   def NormalizeData(data):
+      return (data - np.min(data)) / (np.max(data) - np.min(data))
+   def calculateAUCPRScice(direc):
+      best = pd.read_csv(direc+os.sep+"result"+os.sep+"PRScice_PRS.best",sep="\s+")
+      pheno = pd.read_csv(direc+os.sep+"/test/YRI.pheno",sep="\s+")
+   
+      
+   
+      temp = NormalizeData(best["PRS"].values)
+      best["PRS"] = NormalizeData(np.array(best["PRS"].values))
+      
+      best["PRS"].values[best["PRS"] >=0.5] = 1
+      best["PRS"].values[best["PRS"] < 0.5] = 0
+
+      
+      print("AUC",roc_auc_score(np.array(best["PRS"].values), np.array(pheno['phenotype'].values)))
+      a= best["PRS"].values
+      b = pheno['phenotype'].values
+      accuracy = len([a[i] for i in range(0, len(a)) if a[i] == b[i]]) / len(a)
+      print("Accuracy",accuracy)
+      return temp
+
+
+   def calculateAUCPlink(direc):
+      pheno = pd.read_csv(direc+os.sep+"/test/YRI.pheno",sep="\s+")
+      files = os.listdir(direc+os.sep+"files")
+      maxxacc=0
+      maxauc = 0
+      profile = ""
+      temp = []
+      for loop in files:
+
+         if ".profile" in loop: 
+            # Find AUC for all profiles.  
+            best = pd.read_csv(direc+os.sep+"files"+os.sep+loop,sep="\s+")
+            best["SCORE"] = NormalizeData(best["SCORE"].values)
+            best["SCORE"].values[best["SCORE"] >=0.5] = 1
+            best["SCORE"].values[best["SCORE"] < 0.5] = 0
+            
+            if maxauc<roc_auc_score(best["SCORE"].values, pheno['phenotype'].values):
+               maxauc = roc_auc_score(best["SCORE"].values, pheno['phenotype'].values)
+               temp = NormalizeData(pd.read_csv(direc+os.sep+"files"+os.sep+loop,sep="\s+")["SCORE"].values)
+               profile = loop
+               a= best["SCORE"].values
+               b = pheno['phenotype'].values
+               accuracy = len([a[i] for i in range(0, len(a)) if a[i] == b[i]]) / len(a)
+               maxxacc = accuracy
+      print("AUC",maxauc)
+      print("Accuracy",maxxacc)
+      print("Profile", profile)
+      return temp
+
+   def calculateAUClasso(direc):
+      best = pd.read_csv(direc+os.sep+"result"+os.sep+"test.txt",sep="\s+",header=None)
+      pheno = pd.read_csv(direc+os.sep+"/test/YRI.pheno",sep="\s+")
+   
+   
+      best[0] = NormalizeData(best[0].values)
+      temp = NormalizeData(best[0].values)
+      best[0].values[best[0] >=0.5] = 1
+      best[0].values[best[0] < 0.5] = 0
+
+      print("AUC",roc_auc_score(best[0].values, pheno['phenotype'].values))
+      a= best[0].values
+      b = pheno['phenotype'].values
+      accuracy = len([a[i] for i in range(0, len(a)) if a[i] == b[i]]) / len(a)
+      print("Accuracy",accuracy)
+      return temp
+
+   def calculateAUCMachineLearning(direc):
+      pheno = pd.read_csv(direc+os.sep+"/test/YRI.pheno",sep="\s+")
+      
+      files = os.listdir(direc)
+      maxxacc=0
+      maxauc = 0
+      profile = ""
+      temp = []
+      for loop in files:
+         # Find AUC for all p-values and machine learning.
+         if "pv_" in loop:      
+            best = pd.read_csv(direc+os.sep+loop+os.sep+"ML_probability",sep="\s+",header=None)
+            #plt.hist(best["PRS"].values)
+            #plt.show()
+         
+            #best["PRS"].values[best["PRS"] >= sum(best["PRS"].values)/len(best["PRS"].values)] = 1
+            #best["PRS"].values[best["PRS"] < sum(best["PRS"].values)/len(best["PRS"].values)] = 0
+            best[0] = NormalizeData(best[0].values)
+         
+            best[0].values[best[0] >=0.5] = 1
+            best[0].values[best[0] < 0.5] = 0
+            
+            if maxauc<roc_auc_score(best[0].values, pheno['phenotype'].values):
+               maxauc = roc_auc_score(best[0].values, pheno['phenotype'].values)
+               temp = NormalizeData(pd.read_csv(direc+os.sep+loop+os.sep+"ML_probability",sep="\s+",header=None)[0].values)
+               profile = loop
+               a= best[0].values
+               b = pheno['phenotype'].values
+               accuracy = len([a[i] for i in range(0, len(a)) if a[i] == b[i]]) / len(a)
+               maxxacc = accuracy
+      print("AUC",maxauc)
+      print("Accuracy",maxxacc)
+      print("Profile", profile)
+      return temp
+   
+   x = calculateAUCPRScice(direc)
+   n_samples = len(x)
+   rng = np.random.RandomState(0)
+   x = sns.distplot(x,hist=False,color='y')
+
+   x = calculateAUCPlink(direc)
+   x = sns.distplot(x,hist=True,color = 'r')
+
+   x = calculateAUClasso(direc)
+   x = sns.distplot(x, hist=True,color='g')
+
+
+   x = calculateAUCMachineLearning(direc)
+   x = sns.distplot(x, hist=True,color='b')
+
+   x.figure.legend(labels=['PRScice','Plink','Lassosum','Machine Learning'])
+   x.figure.savefig(direc+os.sep+"result"+os.sep+"output.png")
+
+
+  
+
+   
+   
+ 
+   

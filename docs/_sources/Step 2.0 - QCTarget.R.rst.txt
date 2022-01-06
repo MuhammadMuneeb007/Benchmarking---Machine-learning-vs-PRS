@@ -1,0 +1,391 @@
+Step 2.0 - QCTarget.R
+=========================
+ 
+
+Code execution 
+------------------------
+
+.. code-block:: console
+
+   This is supplementary file and used by CalculatePRS.py to calculate the PRS values.
+   The code segments in this section are taken from this `Tutorial <https://choishingwan.github.io/PRS-Tutorial/base/>`_. 
+   At this point, the dataset is ready such that the code provided in the tutorial can be applied to it. 
+   We just automated all the steps, and we strongly recommend looking at that tutorial for understanding.
+
+Actual Code in QCTarget.R
+--------------------------------
+
+
+.. code-block:: console
+
+   args <- commandArgs(trailingOnly = TRUE)
+   print(args)
+   if (args[2]=="1"){
+      #args<-c("CEU_5_1_prsData")
+      
+      result <-paste(".",args[1],"files",toString("test.QC.het"),sep="/")
+      dat <- read.table(result, header=T) # Read in the EUR.het file, specify it has header
+      m <- mean(dat$F) # Calculate the mean  
+      s <- sd(dat$F) # Calculate the SD
+      valid <- subset(dat, F <= m+3*s & F >= m-3*s) # Get any samples with F coefficient within 3 SD of the population mean
+      result <-paste("./",args[1],"files",toString("test.valid.sample"),sep="//")
+      write.table(valid[,c(1,2)], result, quote=F, row.names=F) # print FID and IID for valid samples
+      result <-paste("./",args[1],"test",toString("test.bim"),sep="//")
+      bim <- read.table(result)
+      
+      colnames(bim) <- c("CHR", "SNP", "CM", "BP", "B.A1", "B.A2")
+      
+      # Read in QCed SNPs
+      result <-paste("./",args[1],"files",toString("test.QC.snplist"),sep="//")
+      
+      qc <- read.table(result, header = F, stringsAsFactors = F)
+      # Read in the GWAS data
+      
+      result <-paste("./",args[1],"files",toString("Data.QC.gz"),sep="//")
+      
+      height <-read.table(gzfile(result),
+                     header = T,
+                     stringsAsFactors = F, 
+                     sep="\t")
+      # Change all alleles to upper case for easy comparison
+      
+      height$A1 <- toupper(height$A1)
+      height$A2 <- toupper(height$A2)
+      bim$B.A1 <- toupper(bim$B.A1)
+      bim$B.A2 <- toupper(bim$B.A2)
+      info <- merge(bim, height, by = c("SNP", "CHR", "BP"))
+      # Filter QCed SNPs
+      
+      info <- info[info$SNP %in% qc$V1,]
+      
+      # Function for finding the complementary allele
+      
+      complement <- function(x) {
+         switch (
+            x,
+            "A" = "T",
+            "C" = "G",
+            "T" = "A",
+            "G" = "C",
+            return(NA)
+         )
+      }
+      
+      # Get SNPs that have the same alleles across base and target
+      info.match <- subset(info, A1 == B.A1 & A2 == B.A2)
+      # Identify SNPs that are complementary between base and target
+      info$C.A1 <- sapply(info$B.A1, complement)
+      info$C.A2 <- sapply(info$B.A2, complement)
+      info.complement <- subset(info, A1 == C.A1 & A2 == C.A2)
+      # Update the complementary alleles in the bim file
+      # This allow us to match the allele in subsequent analysis
+      
+      complement.snps <- bim$SNP %in% info.complement$SNP
+      bim[complement.snps,]$B.A1 <-
+         sapply(bim[complement.snps,]$B.A1, complement)
+      bim[complement.snps,]$B.A2 <-
+         sapply(bim[complement.snps,]$B.A2, complement)
+      
+      # identify SNPs that need recoding
+      info.recode <- subset(info, A1 == B.A2 & A2 == B.A1)
+      # Update the recode SNPs
+      recode.snps <- bim$SNP %in% info.recode$SNP
+      tmp <- bim[recode.snps,]$B.A1
+      bim[recode.snps,]$B.A1 <- bim[recode.snps,]$B.A2
+      bim[recode.snps,]$B.A2 <- tmp
+      
+      # identify SNPs that need recoding & complement
+      info.crecode <- subset(info, A1 == C.A2 & A2 == C.A1)
+      # Update the recode + strand flip SNPs
+      com.snps <- bim$SNP %in% info.crecode$SNP
+      tmp <- bim[com.snps,]$B.A1
+      bim[com.snps,]$B.A1 <- as.character(sapply(bim[com.snps,]$B.A2, complement))
+      bim[com.snps,]$B.A2 <- as.character(sapply(tmp, complement))
+      result <-paste("./",args[1],"files",toString("test.a1"),sep="//")
+      
+      # Output updated bim file
+      write.table(
+         bim[,c("SNP", "B.A1")],
+         result,
+         quote = F,
+         row.names = F,
+         col.names = F,
+         sep="\t"
+      )
+      mismatch <-
+         bim$SNP[!(bim$SNP %in% info.match$SNP |
+                     bim$SNP %in% info.complement$SNP | 
+                     bim$SNP %in% info.recode$SNP |
+                     bim$SNP %in% info.crecode$SNP)]
+      result <-paste("./",args[1],"files",toString("test.mismatch"),sep="//")
+      
+      write.table(
+         mismatch,
+         result,
+         quote = F,
+         row.names = F,
+         col.names = F
+      )
+   
+   
+   }
+   if (args[2]=="2"){
+      result <-paste("./",args[1],"files",toString("test.valid.sample"),sep="//")
+      valid <- read.table(result, header=T)
+      result <-paste("./",args[1],"files",toString("test.QC.sexcheck"),sep="//")
+      dat <- read.table(result, header=T)
+      valid <- subset(dat, STATUS=="OK" & FID %in% valid$FID)
+      result <-paste("./",args[1],"files",toString("test.QC.valid"),sep="//")
+      write.table(valid[,c("FID", "IID")], result, row.names=F, col.names=F, sep="\t", quote=F) 
+   }
+   if (args[2]=="3"){
+      result <-paste("./",args[1],"files",toString("Data.QC.gz"),sep="//")
+      
+      dat <- read.table(gzfile(result), header=T)
+      dat$BETA <- log(dat$OR)
+      result <-paste("./",args[1],"files",toString("Data.QC.Transformed"),sep="//")
+      
+      write.table(dat, result, quote=F, row.names=F)
+   }
+   if (args[2]=="4"){
+
+      result <-paste("./",args[1],"test",toString("YRI.pheno"),sep="//")
+      
+      p.threshold <- c(0.001,0.05,0.1,0.2,0.3,0.4,0.5)
+      # Read in the phenotype file 
+      phenotypes <- read.table(result, sep="\t",header=T)
+      # Read in the PCs
+      result <-paste("./",args[1],"files",toString("test.eigenvec"),sep="//")
+      
+      pcs <- read.table(result, header=F)
+      # The default output from plink does not include a header
+      # To make things simple, we will add the appropriate headers
+      # (1:6 because there are 6 PCs)
+      
+      colnames(pcs) <- c("FID", "IID", paste0("PC",1:6)) 
+      # Read in the covariates (here, it is sex)
+      
+      #pcs$FID <- as.character(pcs$FID)
+      #pcs$IID <- as.character(pcs$FID)
+      
+      #pcs$FID <- paste(pcs$FID, pcs$FID,sep="_")
+      #pcs$IID <- paste(pcs$IID, pcs$IID,sep="_")
+      
+      result <-paste("./",args[1],"test",toString("YRI.covariate"),sep="//")
+      covariate <- read.table(result, header=T)
+      
+      #print(head(phenotypes))
+      #print(head(covariate))
+      #print(head(pcs))
+      # Now merge the files
+      pheno <- merge(merge(phenotypes, covariate, by=c("FID", "IID")), pcs, by=c("FID","IID"))
+      
+      # We can then calculate the null model (model with PRS) using a linear regression 
+      # (as height is quantitative)
+      
+      null.model <- lm(phenotype~., data=pheno[,!colnames(pheno)%in%c("FID","IID")])
+      
+      # And the R2 of the null model is 
+      null.r2 <- summary(null.model)$r.squared
+      
+      prs.result <- NULL
+      for(i in p.threshold){
+         # Go through each p-value threshold
+         result <-paste("./",args[1],"files",paste0("test.",i,".profile"),sep="//")
+         prs <- read.table(result, header=T)
+         #prs$FID <- as.character(prs$FID)
+         #prs$IID <- as.character(prs$FID)
+      
+         #prs$FID <- paste(prs$FID, prs$FID,sep="_")
+         #prs$IID <- paste(prs$IID, prs$IID,sep="_")
+         # Merge the prs with the phenotype matrix
+         # We only want the FID, IID and PRS from the PRS file, therefore we only select the 
+         # relevant columns
+         print(head(prs))
+         pheno.prs <- merge(pheno, prs[,c("FID","IID", "SCORE")], by=c("FID", "IID"))
+         # Now perform a linear regression on Height with PRS and the covariates
+         # ignoring the FID and IID from our model
+         model <- lm(phenotype~., data=pheno.prs[,!colnames(pheno.prs)%in%c("FID","IID")])
+         # model R2 is obtained as 
+         model.r2 <- summary(model)$r.squared
+         # R2 of PRS is simply calculated as the model R2 minus the null R2
+         prs.r2 <- model.r2-null.r2
+         # We can also obtain the coeffcient and p-value of association of PRS as follow
+         prs.coef <- summary(model)$coeff["SCORE",]
+         prs.beta <- as.numeric(prs.coef[1])
+         prs.se <- as.numeric(prs.coef[2])
+         prs.p <- as.numeric(prs.coef[4])
+         # We can then store the results
+         prs.result <- rbind(prs.result, data.frame(Threshold=i, R2=prs.r2, P=prs.p, BETA=prs.beta,SE=prs.se))
+      }
+      # Best result is:
+      print(prs.result[which.max(prs.result$R2),])
+      #args<-c("CEU_5_1_prsData")
+      
+      #result <-paste(strsplit(args[1], "_prsData"),"_results",sep="")
+      result <-paste("./",args[1],"result",toString("PLINK.bar.png"),sep="//")
+      
+      png(result,
+            height=10, width=10, res=300, unit="in")
+      # First, obtain the colorings based on the p-value
+      col <- suppressWarnings(colorRampPalette(c("dodgerblue", "firebrick")))
+      # We want the color gradient to match the ranking of p-values
+      prs.result <- prs.result[order(-log10(prs.result$P)),]
+      prs.result$color <-  col(nrow(prs.result))
+      prs.result <- prs.result[order(prs.result$Threshold),]
+      # generate a pretty format for p-value output
+      prs.result$print.p <- round(prs.result$P, digits = 3)
+      prs.result$print.p[!is.na(prs.result$print.p) & prs.result$print.p == 0 ] <-
+         format(prs.result$P[!is.na(prs.result$print.p) & prs.result$print.p == 0 ], digits = 2)
+      prs.result$print.p <- sub("e", "*x*10^", prs.result$print.p)
+      # Generate the axis labels
+      xlab <- expression(italic(P) - value ~ threshold ~ (italic(P)[T]))
+      ylab <- expression(paste("PRS model fit:  ", R ^ 2))
+      # Setup the drawing area
+      layout(t(1:2), widths=c(8.8,1.2))
+      par( cex.lab=1.5, cex.axis=1.25, font.lab=2, 
+            oma=c(0,0.5,0,0),
+            mar=c(4,6,0.5,0.5))
+      # Plotting the bars
+      b<- barplot(height=prs.result$R2, 
+                  col=prs.result$color, 
+                  border=NA, 
+                  ylim=c(0, max(prs.result$R2)*1.25), 
+                  axes = F, ann=F)
+      # Plot the axis labels and axis ticks
+      odd <- seq(0,nrow(prs.result)+1,2)
+      even <- seq(1,nrow(prs.result),2)
+      axis(side=1, at=b[odd], labels=prs.result$Threshold[odd], lwd=2)
+      axis(side=1, at=b[even], labels=prs.result$Threshold[even],lwd=2)
+      axis(side=1, at=c(0,b[1],2*b[length(b)]-b[length(b)-1]), labels=c("","",""), lwd=2, lwd.tick=0)
+      # Write the p-value on top of each bar
+      text( parse(text=paste(
+         prs.result$print.p)), 
+         x = b+0.1, 
+         y =  prs.result$R2+ (max(prs.result$R2)*1.05-max(prs.result$R2)), 
+         srt = 45)
+      # Now plot the axis lines
+      box(bty='L', lwd=2)
+      axis(2,las=2, lwd=2)
+      # Plot the axis titles
+      title(ylab=ylab, line=4, cex.lab=1.5, font=2 )
+      title(xlab=xlab, line=2.5, cex.lab=1.5, font=2 )
+      # Generate plot area for the legend
+      par(cex.lab=1.5, cex.axis=1.25, font.lab=2, 
+            mar=c(20,0,20,4))
+      prs.result <- prs.result[order(-log10(prs.result$P)),]
+      image(1, -log10(prs.result$P), t(seq_along(-log10(prs.result$P))), col=prs.result$color, axes=F,ann=F)
+      axis(4,las=2,xaxs='r',yaxs='r', tck=0.2, col="white")
+      # plot legend title
+      title(bquote(atop(-log[10] ~ model, italic(P) - value), ), 
+            line=2, cex=1.5, font=2, adj=0)
+      # write the plot to file
+      dev.off()
+   } 
+   if (args[2]=="6"){
+      #install.packages(c("devtools","RcppArmadillo", "data.table", "Matrix"), dependencies=TRUE)
+      #library(devtools)
+      #install_github("tshmak/lassosum")
+      library(lassosum)
+      # Prefer to work with data.table as it speeds up file reading
+      library(data.table)
+      library(methods)
+      library(magrittr)
+      # For multi-threading, you can use the parallel package and 
+      # invoke cl which is then passed to lassosum.pipeline
+      library(parallel)
+      # This will invoke 2 threads. 
+      cl <- makeCluster(2)
+      result <-paste("./",args[1],"files","Data.QC.gz",sep="//")
+      
+      sum.stat <- result
+      result <-paste("./",args[1],"files","test.QC",sep="//")
+      bfile <- result
+      # Read in and process the covariates
+      result <-paste("./",args[1],"test","YRI.covariate",sep="//")
+      covariate <- fread(result)
+      result <-paste("./",args[1],"files","test.eigenvec",sep="//")
+      pcs <- fread(result) %>% setnames(., colnames(.), c("FID","IID", paste0("PC",1:6)))
+      # Need as.data.frame here as lassosum doesn't handle data.table 
+      # covariates very well
+      
+      #pcs$FID <- as.character(pcs$FID)
+      #pcs$IID <- as.character(pcs$FID)
+      
+      #pcs$FID <- paste(pcs$FID, pcs$FID,sep="_")
+      #pcs$IID <- paste(pcs$IID, pcs$IID,sep="_")
+      print(head(covariate))
+      print(head(pcs))
+      
+      cov <- merge(covariate, pcs)
+      
+      # We will need the EUR.hg19 file provided by lassosum 
+      # which are LD regions defined in Berisa and Pickrell (2015) for the European population and the hg19 genome.
+      ld.file <- "EUR.hg19"
+      # output prefix
+      prefix <- "EUR"
+      # Read in the target phenotype file
+      result <-paste("./",args[1],"test","YRI.pheno",sep="//")
+      bfile <-paste("./",args[1],"files","test.QC",sep="//")
+      target.pheno <- fread(result)[,c("FID", "IID", "phenotype")]
+      print(head(target.pheno))
+      
+      # Read in the summary statistics
+      ss <- fread(sum.stat)
+      # Remove P-value = 0, which causes problem in the transformation
+      ss <- ss[!P == 0]
+      # Transform the P-values into correlation
+      cor <- p2cor(p = ss$P,
+                     n = ss$N,
+                     sign = log(ss$OR)
+      )
+      result <-paste("./",args[1],"test","test.fam",sep="//")
+      
+      fam <- fread(result)
+      #fam$V1 <- as.character(fam$V1)
+      #fam$V2 <- as.character(fam$V2)
+      
+      #fam$V1 <- paste(fam$V1, fam$V1,sep="_")
+      #fam$V2 <- paste(fam$V2, fam$V2,sep="_")
+      #fam$V6 <- paste(fam$V2, fam$V2,sep="_")
+      fam$V6[fam$V6==1]<-0
+      fam$V6[fam$V6==2]<-1
+
+      fam[,ID:=do.call(paste, c(.SD, sep=":")),.SDcols=c(1:2)]
+      
+      
+      # Run the lassosum pipeline
+      # The cluster parameter is used for multi-threading
+      # You can ignore that if you do not wish to perform multi-threaded processing
+      out <- lassosum.pipeline(
+         cor = cor,
+         chr = ss$CHR,
+         pos = ss$BP,
+         A1 = ss$A1,
+         A2 = ss$A2,
+         ref.bfile = bfile,
+         test.bfile = bfile,
+         LDblocks = ld.file, 
+         cluster=cl
+      )
+      # Store the R2 results
+      
+      result <-paste("./",args[1],"result","YRI.result",sep="//")
+      
+      target.res <- validate(out, pheno = as.data.frame(target.pheno), covar=as.data.frame(cov))
+      # Get the maximum R2
+      help(validate)
+      result <-paste("./",args[1],"result","test.txt",sep="//")
+      
+      lapply(target.res[["best.pgs"]], write, result, append=TRUE, ncolumns=1000)
+      r2 <- max(target.res$validation.table$value)^2
+      print(r2)
+   }
+
+
+  
+
+   
+   
+ 
+   

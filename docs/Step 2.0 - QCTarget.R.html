@@ -1,0 +1,494 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Step 2.0 - QCTarget.R &#8212; Benchmarking Polygenic Risk Scores vs. Machine Learning 1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Step 3 - Pvaluethreshold" href="Step%203%20-%20Pvaluethreshold.html" />
+    <link rel="prev" title="Step 2 - CalculatePRS" href="Step%202%20-%20CalculatePRS.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="step-2-0-qctarget-r">
+<h1>Step 2.0 - QCTarget.R<a class="headerlink" href="#step-2-0-qctarget-r" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="code-execution">
+<h2>Code execution<a class="headerlink" href="#code-execution" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">This is supplementary file and used by CalculatePRS.py to calculate the PRS values.</span>
+<span class="go">The code segments in this section are taken from this `Tutorial &lt;https://choishingwan.github.io/PRS-Tutorial/base/&gt;`_.</span>
+<span class="go">At this point, the dataset is ready such that the code provided in the tutorial can be applied to it.</span>
+<span class="go">We just automated all the steps, and we strongly recommend looking at that tutorial for understanding.</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="actual-code-in-qctarget-r">
+<h2>Actual Code in QCTarget.R<a class="headerlink" href="#actual-code-in-qctarget-r" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span>args &lt;- commandArgs(trailingOnly = TRUE)
+print(args)
+if (args[2]==&quot;1&quot;){
+   #args&lt;-c(&quot;CEU_5_1_prsData&quot;)
+
+   result &lt;-paste(&quot;.&quot;,args[1],&quot;files&quot;,toString(&quot;test.QC.het&quot;),sep=&quot;/&quot;)
+   dat &lt;- read.table(result, header=T) # Read in the EUR.het file, specify it has header
+   m &lt;- mean(dat$F) # Calculate the mean
+   s &lt;- sd(dat$F) # Calculate the SD
+   valid &lt;- subset(dat, F &lt;= m+3*s &amp; F &gt;= m-3*s) # Get any samples with F coefficient within 3 SD of the population mean
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;test.valid.sample&quot;),sep=&quot;//&quot;)
+   write.table(valid[,c(1,2)], result, quote=F, row.names=F) # print FID and IID for valid samples
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;test&quot;,toString(&quot;test.bim&quot;),sep=&quot;//&quot;)
+   bim &lt;- read.table(result)
+
+   colnames(bim) &lt;- c(&quot;CHR&quot;, &quot;SNP&quot;, &quot;CM&quot;, &quot;BP&quot;, &quot;B.A1&quot;, &quot;B.A2&quot;)
+
+   # Read in QCed SNPs
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;test.QC.snplist&quot;),sep=&quot;//&quot;)
+
+   qc &lt;- read.table(result, header = F, stringsAsFactors = F)
+   # Read in the GWAS data
+
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;Data.QC.gz&quot;),sep=&quot;//&quot;)
+
+   height &lt;-read.table(gzfile(result),
+                  header = T,
+                  stringsAsFactors = F,
+                  sep=&quot;\t&quot;)
+   # Change all alleles to upper case for easy comparison
+
+   height$A1 &lt;- toupper(height$A1)
+   height$A2 &lt;- toupper(height$A2)
+   bim$B.A1 &lt;- toupper(bim$B.A1)
+   bim$B.A2 &lt;- toupper(bim$B.A2)
+   info &lt;- merge(bim, height, by = c(&quot;SNP&quot;, &quot;CHR&quot;, &quot;BP&quot;))
+   # Filter QCed SNPs
+
+   info &lt;- info[info$SNP %in% qc$V1,]
+
+   # Function for finding the complementary allele
+
+   complement &lt;- function(x) {
+      switch (
+         x,
+         &quot;A&quot; = &quot;T&quot;,
+         &quot;C&quot; = &quot;G&quot;,
+         &quot;T&quot; = &quot;A&quot;,
+         &quot;G&quot; = &quot;C&quot;,
+         return(NA)
+      )
+   }
+
+   # Get SNPs that have the same alleles across base and target
+   info.match &lt;- subset(info, A1 == B.A1 &amp; A2 == B.A2)
+   # Identify SNPs that are complementary between base and target
+   info$C.A1 &lt;- sapply(info$B.A1, complement)
+   info$C.A2 &lt;- sapply(info$B.A2, complement)
+   info.complement &lt;- subset(info, A1 == C.A1 &amp; A2 == C.A2)
+   # Update the complementary alleles in the bim file
+   # This allow us to match the allele in subsequent analysis
+
+   complement.snps &lt;- bim$SNP %in% info.complement$SNP
+   bim[complement.snps,]$B.A1 &lt;-
+      sapply(bim[complement.snps,]$B.A1, complement)
+   bim[complement.snps,]$B.A2 &lt;-
+      sapply(bim[complement.snps,]$B.A2, complement)
+
+   # identify SNPs that need recoding
+   info.recode &lt;- subset(info, A1 == B.A2 &amp; A2 == B.A1)
+   # Update the recode SNPs
+   recode.snps &lt;- bim$SNP %in% info.recode$SNP
+   tmp &lt;- bim[recode.snps,]$B.A1
+   bim[recode.snps,]$B.A1 &lt;- bim[recode.snps,]$B.A2
+   bim[recode.snps,]$B.A2 &lt;- tmp
+
+   # identify SNPs that need recoding &amp; complement
+   info.crecode &lt;- subset(info, A1 == C.A2 &amp; A2 == C.A1)
+   # Update the recode + strand flip SNPs
+   com.snps &lt;- bim$SNP %in% info.crecode$SNP
+   tmp &lt;- bim[com.snps,]$B.A1
+   bim[com.snps,]$B.A1 &lt;- as.character(sapply(bim[com.snps,]$B.A2, complement))
+   bim[com.snps,]$B.A2 &lt;- as.character(sapply(tmp, complement))
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;test.a1&quot;),sep=&quot;//&quot;)
+
+   # Output updated bim file
+   write.table(
+      bim[,c(&quot;SNP&quot;, &quot;B.A1&quot;)],
+      result,
+      quote = F,
+      row.names = F,
+      col.names = F,
+      sep=&quot;\t&quot;
+   )
+   mismatch &lt;-
+      bim$SNP[!(bim$SNP %in% info.match$SNP |
+                  bim$SNP %in% info.complement$SNP |
+                  bim$SNP %in% info.recode$SNP |
+                  bim$SNP %in% info.crecode$SNP)]
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;test.mismatch&quot;),sep=&quot;//&quot;)
+
+   write.table(
+      mismatch,
+      result,
+      quote = F,
+      row.names = F,
+      col.names = F
+   )
+
+
+}
+if (args[2]==&quot;2&quot;){
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;test.valid.sample&quot;),sep=&quot;//&quot;)
+   valid &lt;- read.table(result, header=T)
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;test.QC.sexcheck&quot;),sep=&quot;//&quot;)
+   dat &lt;- read.table(result, header=T)
+   valid &lt;- subset(dat, STATUS==&quot;OK&quot; &amp; FID %in% valid$FID)
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;test.QC.valid&quot;),sep=&quot;//&quot;)
+   write.table(valid[,c(&quot;FID&quot;, &quot;IID&quot;)], result, row.names=F, col.names=F, sep=&quot;\t&quot;, quote=F)
+}
+if (args[2]==&quot;3&quot;){
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;Data.QC.gz&quot;),sep=&quot;//&quot;)
+
+   dat &lt;- read.table(gzfile(result), header=T)
+   dat$BETA &lt;- log(dat$OR)
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;Data.QC.Transformed&quot;),sep=&quot;//&quot;)
+
+   write.table(dat, result, quote=F, row.names=F)
+}
+if (args[2]==&quot;4&quot;){
+
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;test&quot;,toString(&quot;YRI.pheno&quot;),sep=&quot;//&quot;)
+
+   p.threshold &lt;- c(0.001,0.05,0.1,0.2,0.3,0.4,0.5)
+   # Read in the phenotype file
+   phenotypes &lt;- read.table(result, sep=&quot;\t&quot;,header=T)
+   # Read in the PCs
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,toString(&quot;test.eigenvec&quot;),sep=&quot;//&quot;)
+
+   pcs &lt;- read.table(result, header=F)
+   # The default output from plink does not include a header
+   # To make things simple, we will add the appropriate headers
+   # (1:6 because there are 6 PCs)
+
+   colnames(pcs) &lt;- c(&quot;FID&quot;, &quot;IID&quot;, paste0(&quot;PC&quot;,1:6))
+   # Read in the covariates (here, it is sex)
+
+   #pcs$FID &lt;- as.character(pcs$FID)
+   #pcs$IID &lt;- as.character(pcs$FID)
+
+   #pcs$FID &lt;- paste(pcs$FID, pcs$FID,sep=&quot;_&quot;)
+   #pcs$IID &lt;- paste(pcs$IID, pcs$IID,sep=&quot;_&quot;)
+
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;test&quot;,toString(&quot;YRI.covariate&quot;),sep=&quot;//&quot;)
+   covariate &lt;- read.table(result, header=T)
+
+   #print(head(phenotypes))
+   #print(head(covariate))
+   #print(head(pcs))
+   # Now merge the files
+   pheno &lt;- merge(merge(phenotypes, covariate, by=c(&quot;FID&quot;, &quot;IID&quot;)), pcs, by=c(&quot;FID&quot;,&quot;IID&quot;))
+
+   # We can then calculate the null model (model with PRS) using a linear regression
+   # (as height is quantitative)
+
+   null.model &lt;- lm(phenotype~., data=pheno[,!colnames(pheno)%in%c(&quot;FID&quot;,&quot;IID&quot;)])
+
+   # And the R2 of the null model is
+   null.r2 &lt;- summary(null.model)$r.squared
+
+   prs.result &lt;- NULL
+   for(i in p.threshold){
+      # Go through each p-value threshold
+      result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,paste0(&quot;test.&quot;,i,&quot;.profile&quot;),sep=&quot;//&quot;)
+      prs &lt;- read.table(result, header=T)
+      #prs$FID &lt;- as.character(prs$FID)
+      #prs$IID &lt;- as.character(prs$FID)
+
+      #prs$FID &lt;- paste(prs$FID, prs$FID,sep=&quot;_&quot;)
+      #prs$IID &lt;- paste(prs$IID, prs$IID,sep=&quot;_&quot;)
+      # Merge the prs with the phenotype matrix
+      # We only want the FID, IID and PRS from the PRS file, therefore we only select the
+      # relevant columns
+      print(head(prs))
+      pheno.prs &lt;- merge(pheno, prs[,c(&quot;FID&quot;,&quot;IID&quot;, &quot;SCORE&quot;)], by=c(&quot;FID&quot;, &quot;IID&quot;))
+      # Now perform a linear regression on Height with PRS and the covariates
+      # ignoring the FID and IID from our model
+      model &lt;- lm(phenotype~., data=pheno.prs[,!colnames(pheno.prs)%in%c(&quot;FID&quot;,&quot;IID&quot;)])
+      # model R2 is obtained as
+      model.r2 &lt;- summary(model)$r.squared
+      # R2 of PRS is simply calculated as the model R2 minus the null R2
+      prs.r2 &lt;- model.r2-null.r2
+      # We can also obtain the coeffcient and p-value of association of PRS as follow
+      prs.coef &lt;- summary(model)$coeff[&quot;SCORE&quot;,]
+      prs.beta &lt;- as.numeric(prs.coef[1])
+      prs.se &lt;- as.numeric(prs.coef[2])
+      prs.p &lt;- as.numeric(prs.coef[4])
+      # We can then store the results
+      prs.result &lt;- rbind(prs.result, data.frame(Threshold=i, R2=prs.r2, P=prs.p, BETA=prs.beta,SE=prs.se))
+   }
+   # Best result is:
+   print(prs.result[which.max(prs.result$R2),])
+   #args&lt;-c(&quot;CEU_5_1_prsData&quot;)
+
+   #result &lt;-paste(strsplit(args[1], &quot;_prsData&quot;),&quot;_results&quot;,sep=&quot;&quot;)
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;result&quot;,toString(&quot;PLINK.bar.png&quot;),sep=&quot;//&quot;)
+
+   png(result,
+         height=10, width=10, res=300, unit=&quot;in&quot;)
+   # First, obtain the colorings based on the p-value
+   col &lt;- suppressWarnings(colorRampPalette(c(&quot;dodgerblue&quot;, &quot;firebrick&quot;)))
+   # We want the color gradient to match the ranking of p-values
+   prs.result &lt;- prs.result[order(-log10(prs.result$P)),]
+   prs.result$color &lt;-  col(nrow(prs.result))
+   prs.result &lt;- prs.result[order(prs.result$Threshold),]
+   # generate a pretty format for p-value output
+   prs.result$print.p &lt;- round(prs.result$P, digits = 3)
+   prs.result$print.p[!is.na(prs.result$print.p) &amp; prs.result$print.p == 0 ] &lt;-
+      format(prs.result$P[!is.na(prs.result$print.p) &amp; prs.result$print.p == 0 ], digits = 2)
+   prs.result$print.p &lt;- sub(&quot;e&quot;, &quot;*x*10^&quot;, prs.result$print.p)
+   # Generate the axis labels
+   xlab &lt;- expression(italic(P) - value ~ threshold ~ (italic(P)[T]))
+   ylab &lt;- expression(paste(&quot;PRS model fit:  &quot;, R ^ 2))
+   # Setup the drawing area
+   layout(t(1:2), widths=c(8.8,1.2))
+   par( cex.lab=1.5, cex.axis=1.25, font.lab=2,
+         oma=c(0,0.5,0,0),
+         mar=c(4,6,0.5,0.5))
+   # Plotting the bars
+   b&lt;- barplot(height=prs.result$R2,
+               col=prs.result$color,
+               border=NA,
+               ylim=c(0, max(prs.result$R2)*1.25),
+               axes = F, ann=F)
+   # Plot the axis labels and axis ticks
+   odd &lt;- seq(0,nrow(prs.result)+1,2)
+   even &lt;- seq(1,nrow(prs.result),2)
+   axis(side=1, at=b[odd], labels=prs.result$Threshold[odd], lwd=2)
+   axis(side=1, at=b[even], labels=prs.result$Threshold[even],lwd=2)
+   axis(side=1, at=c(0,b[1],2*b[length(b)]-b[length(b)-1]), labels=c(&quot;&quot;,&quot;&quot;,&quot;&quot;), lwd=2, lwd.tick=0)
+   # Write the p-value on top of each bar
+   text( parse(text=paste(
+      prs.result$print.p)),
+      x = b+0.1,
+      y =  prs.result$R2+ (max(prs.result$R2)*1.05-max(prs.result$R2)),
+      srt = 45)
+   # Now plot the axis lines
+   box(bty=&#39;L&#39;, lwd=2)
+   axis(2,las=2, lwd=2)
+   # Plot the axis titles
+   title(ylab=ylab, line=4, cex.lab=1.5, font=2 )
+   title(xlab=xlab, line=2.5, cex.lab=1.5, font=2 )
+   # Generate plot area for the legend
+   par(cex.lab=1.5, cex.axis=1.25, font.lab=2,
+         mar=c(20,0,20,4))
+   prs.result &lt;- prs.result[order(-log10(prs.result$P)),]
+   image(1, -log10(prs.result$P), t(seq_along(-log10(prs.result$P))), col=prs.result$color, axes=F,ann=F)
+   axis(4,las=2,xaxs=&#39;r&#39;,yaxs=&#39;r&#39;, tck=0.2, col=&quot;white&quot;)
+   # plot legend title
+   title(bquote(atop(-log[10] ~ model, italic(P) - value), ),
+         line=2, cex=1.5, font=2, adj=0)
+   # write the plot to file
+   dev.off()
+}
+if (args[2]==&quot;6&quot;){
+   #install.packages(c(&quot;devtools&quot;,&quot;RcppArmadillo&quot;, &quot;data.table&quot;, &quot;Matrix&quot;), dependencies=TRUE)
+   #library(devtools)
+   #install_github(&quot;tshmak/lassosum&quot;)
+   library(lassosum)
+   # Prefer to work with data.table as it speeds up file reading
+   library(data.table)
+   library(methods)
+   library(magrittr)
+   # For multi-threading, you can use the parallel package and
+   # invoke cl which is then passed to lassosum.pipeline
+   library(parallel)
+   # This will invoke 2 threads.
+   cl &lt;- makeCluster(2)
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,&quot;Data.QC.gz&quot;,sep=&quot;//&quot;)
+
+   sum.stat &lt;- result
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,&quot;test.QC&quot;,sep=&quot;//&quot;)
+   bfile &lt;- result
+   # Read in and process the covariates
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;test&quot;,&quot;YRI.covariate&quot;,sep=&quot;//&quot;)
+   covariate &lt;- fread(result)
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,&quot;test.eigenvec&quot;,sep=&quot;//&quot;)
+   pcs &lt;- fread(result) %&gt;% setnames(., colnames(.), c(&quot;FID&quot;,&quot;IID&quot;, paste0(&quot;PC&quot;,1:6)))
+   # Need as.data.frame here as lassosum doesn&#39;t handle data.table
+   # covariates very well
+
+   #pcs$FID &lt;- as.character(pcs$FID)
+   #pcs$IID &lt;- as.character(pcs$FID)
+
+   #pcs$FID &lt;- paste(pcs$FID, pcs$FID,sep=&quot;_&quot;)
+   #pcs$IID &lt;- paste(pcs$IID, pcs$IID,sep=&quot;_&quot;)
+   print(head(covariate))
+   print(head(pcs))
+
+   cov &lt;- merge(covariate, pcs)
+
+   # We will need the EUR.hg19 file provided by lassosum
+   # which are LD regions defined in Berisa and Pickrell (2015) for the European population and the hg19 genome.
+   ld.file &lt;- &quot;EUR.hg19&quot;
+   # output prefix
+   prefix &lt;- &quot;EUR&quot;
+   # Read in the target phenotype file
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;test&quot;,&quot;YRI.pheno&quot;,sep=&quot;//&quot;)
+   bfile &lt;-paste(&quot;./&quot;,args[1],&quot;files&quot;,&quot;test.QC&quot;,sep=&quot;//&quot;)
+   target.pheno &lt;- fread(result)[,c(&quot;FID&quot;, &quot;IID&quot;, &quot;phenotype&quot;)]
+   print(head(target.pheno))
+
+   # Read in the summary statistics
+   ss &lt;- fread(sum.stat)
+   # Remove P-value = 0, which causes problem in the transformation
+   ss &lt;- ss[!P == 0]
+   # Transform the P-values into correlation
+   cor &lt;- p2cor(p = ss$P,
+                  n = ss$N,
+                  sign = log(ss$OR)
+   )
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;test&quot;,&quot;test.fam&quot;,sep=&quot;//&quot;)
+
+   fam &lt;- fread(result)
+   #fam$V1 &lt;- as.character(fam$V1)
+   #fam$V2 &lt;- as.character(fam$V2)
+
+   #fam$V1 &lt;- paste(fam$V1, fam$V1,sep=&quot;_&quot;)
+   #fam$V2 &lt;- paste(fam$V2, fam$V2,sep=&quot;_&quot;)
+   #fam$V6 &lt;- paste(fam$V2, fam$V2,sep=&quot;_&quot;)
+   fam$V6[fam$V6==1]&lt;-0
+   fam$V6[fam$V6==2]&lt;-1
+
+   fam[,ID:=do.call(paste, c(.SD, sep=&quot;:&quot;)),.SDcols=c(1:2)]
+
+
+   # Run the lassosum pipeline
+   # The cluster parameter is used for multi-threading
+   # You can ignore that if you do not wish to perform multi-threaded processing
+   out &lt;- lassosum.pipeline(
+      cor = cor,
+      chr = ss$CHR,
+      pos = ss$BP,
+      A1 = ss$A1,
+      A2 = ss$A2,
+      ref.bfile = bfile,
+      test.bfile = bfile,
+      LDblocks = ld.file,
+      cluster=cl
+   )
+   # Store the R2 results
+
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;result&quot;,&quot;YRI.result&quot;,sep=&quot;//&quot;)
+
+   target.res &lt;- validate(out, pheno = as.data.frame(target.pheno), covar=as.data.frame(cov))
+   # Get the maximum R2
+   help(validate)
+   result &lt;-paste(&quot;./&quot;,args[1],&quot;result&quot;,&quot;test.txt&quot;,sep=&quot;//&quot;)
+
+   lapply(target.res[[&quot;best.pgs&quot;]], write, result, append=TRUE, ncolumns=1000)
+   r2 &lt;- max(target.res$validation.table$value)^2
+   print(r2)
+}
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Benchmarking Polygenic Risk Scores vs. Machine Learning</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="Step%200%20-%20Generate%20Data.html">Step 0 - Generate Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%201%20-%20Divide%20Data%20into%20Base%20and%20Target%20sets.html">Step 1 - Divide Data into Base and Target sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%202%20-%20CalculatePRS.html">Step 2 - CalculatePRS</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Step 2.0 - QCTarget.R</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#code-execution">Code execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#actual-code-in-qctarget-r">Actual Code in QCTarget.R</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="Step%203%20-%20Pvaluethreshold.html">Step 3 - Pvaluethreshold</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%204%20-%20MachineLearning.html">Step 4 - MachineLearning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%205%20-%20GetResults.html">Step 5 - GetResults</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="Step%202%20-%20CalculatePRS.html" title="previous chapter">Step 2 - CalculatePRS</a></li>
+      <li>Next: <a href="Step%203%20-%20Pvaluethreshold.html" title="next chapter">Step 3 - Pvaluethreshold</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Muhammad Muneeb and Samuel F. Feng.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.2.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/Step 2.0 - QCTarget.R.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

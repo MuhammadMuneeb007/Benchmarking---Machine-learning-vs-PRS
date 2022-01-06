@@ -1,0 +1,152 @@
+Step 2 - CalculatePRS
+=========================
+ 
+
+Code execution 
+------------------------
+
+.. code-block:: console
+
+   python CalculatePRS.py (DirectoryName in which files will be stored)
+   For example: python CalculatePRS.py 1
+
+
+Actual Code in CalculatePRS.py
+--------------------------------
+
+
+.. code-block:: console
+
+   import pandas as pd
+   import os
+   import glob
+   import numpy as np
+   import shutil
+   import sys
+   import numpy as np
+   import scipy as sp
+   from scipy import stats
+   import matplotlib.pyplot as plt 
+   import os
+   import pandas as pd
+   import numpy as np
+   from sklearn.metrics import roc_auc_score
+   import math
+   direc = sys.argv[1] 
+   
+   
+   
+   traindirec = direc+os.sep+"train"
+   testdirec =direc+os.sep+"test"
+   result = direc+os.sep+"result"
+   fdirec = direc+os.sep+"files"
+
+   if not os.path.isdir(direc+os.sep+"files"):
+      os.mkdir(direc+os.sep+"files")
+   if not os.path.isdir(direc+os.sep+"result"):
+      os.mkdir(direc+os.sep+"result")  
+   
+   def changeIDS(direct):
+      data = pd.read_csv(direct, sep="\s+",index_col=False)
+      data['FID'] = data['FID'].str.split('_').str[0]
+      data['IID'] = data['IID'].str.split('_').str[0]
+      data.to_csv(direct,sep="\t",index=False)
+   
+   # Modify the bim file for the test data.
+   bimfile = pd.read_csv(testdirec+os.sep+"test.bim",header=None,sep="\s+")
+   bimfile[0] = 21
+   bimfile[2] = list(range(1,len(bimfile)+1))
+   bimfile.to_csv(testdirec+os.sep+"test.bim",header=False, index=False, sep="\t")
+         
+   # Modify the GWAS file, and use the correct chromosome number for each SNP.
+   data = pd.read_csv(traindirec+os.sep+"Data.txt",sep="\s+")
+   data['CHR']=21
+   data.to_csv(traindirec+os.sep+"Data.txt.gz", index=False, sep="\t",compression='gzip')
+
+   changeIDS(testdirec+os.sep+"YRI.covariate")
+   changeIDS(testdirec+os.sep+"YRI.pheno")
+   
+   changeIDS(traindirec+os.sep+"YRI.covariate")
+   changeIDS(traindirec+os.sep+"YRI.pheno")
+   
+
+The code segments afterward are taken from this `Tutorial <https://choishingwan.github.io/PRS-Tutorial/base/>`_. 
+At this point, the dataset is ready such that the code provided in the tutorial can be applied to it. 
+We just automated all the steps, and we strongly recommend looking at that tutorial for understanding.
+
+.. code-block:: console
+
+
+   os.system("gunzip -c ./"+traindirec+os.sep+"Data.txt.gz | awk 'NR==1 || ($11 > 0.01) && ($10 > 0.8) {print}' | gzip  > ./"+fdirec+os.sep+"Data.gz") 
+   os.system("gunzip -c ./"+fdirec+os.sep+"Data.gz | awk '{seen[$3]++; if(seen[$3]==1){ print}}' | gzip -> ./"+fdirec+os.sep+"Data.nodup.gz")
+   os.system("gunzip -c ./"+fdirec+os.sep+"Data.nodup.gz | awk '!( ($4==\"A\" && $5==\"T\") || ($4==\"T\" && $5==\"A\") || ($4==\"G\" && $5==\"C\") || ($4==\"C\" && $5==\"G\")) {print}' | gzip > ./"+fdirec+os.sep+"Data.QC.gz")
+
+   ###QC-TargetFile
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --maf 0.01 --hwe 1e-6 --geno 0.01 --mind 0.01 --write-snplist --make-just-fam --allow-no-sex -out ./"+fdirec+os.sep+"test.QC")
+   
+
+
+
+   ###This will work for alot of variants.
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --keep ./"+fdirec+os.sep+"test.QC.fam --extract ./"+fdirec+os.sep+"test.QC.snplist --allow-no-sex --indep-pairwise 200 50 0.25 --out ./"+fdirec+os.sep+"test.QC")
+
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --extract ./"+fdirec+os.sep+"test.QC.prune.in --keep ./"+fdirec+os.sep+"test.QC.fam --het --out ./"+fdirec+os.sep+"test.QC")
+
+
+   os.system("Rscript QCtarget.R "+direc+" 1")
+   print("Rscript QCtarget.R  1")
+
+
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --extract ./"+testdirec+os.sep+"test.QC.prune.in --keep ./"+testdirec+os.sep+"test.valid.sample --out ./"+testdirec+os.sep+"test.QC")
+   #exit(0)
+
+   ###If sex information is present then use this. Simulated data does not contain the sex information so, we ignored it.
+
+   '''
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --extract ./"+fdirec+os.sep+"test.QC.prune.in --keep ./"+fdirec+os.sep+"test.valid.sample --check-sex --out ./"+fdirec+os.sep+"test.QC")
+   os.system("Rscript QCtarget.R "+direc+" 2")
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --extract ./"+fdirec+os.sep+"test.QC.prune.in --keep ./"+fdirec+os.sep+"test.QC.valid --rel-cutoff 0.125 --out ./"+fdirec+os.sep+"test.QC")
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --make-bed --allow-no-sex --allow-no-vars --keep ./"+fdirec+os.sep+"test.QC.rel.id --out ./"+fdirec+os.sep+"test.QC --extract ./"+fdirec+os.sep+"test.QC.snplist --exclude ./"+fdirec+os.sep+"test.mismatch --a1-allele ./"+fdirec+os.sep+"EUR.a1")
+   '''
+   ##Mismatch information
+   #When information is correct.
+   #os.system("./plink --bfile ./"+testdirec+os.sep+"test --make-bed --allow-no-sex  --out ./"+fdirec+os.sep+"test.QC --extract ./"+fdirec+os.sep+"test.QC.snplist --exclude ./"+fdirec+os.sep+"test.mismatch --a1-allele ./"+fdirec+os.sep+"test.a1")
+
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --make-bed --allow-no-sex  --out ./"+fdirec+os.sep+"test.QC --extract ./"+fdirec+os.sep+"test.QC.snplist  --a1-allele ./"+fdirec+os.sep+"test.a1")
+
+
+   ###Make final files
+
+   os.system("Rscript QCtarget.R  "+direc+"  3")
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --clump-p1 1 --clump-r2 0.1 --clump-kb 250 --clump ./"+fdirec+os.sep+"Data.QC.Transformed --clump-snp-field SNP --clump-field P --out ./"+fdirec+os.sep+"test")
+
+   os.system("awk 'NR!=1{print $3}' ./"+fdirec+os.sep+"test.clumped >  ./"+fdirec+os.sep+"test.valid.snp")
+   os.system("awk '{print $3,$8}' ./"+fdirec+os.sep+"Data.QC.Transformed >  ./"+fdirec+os.sep+"SNP.pvalue")
+
+   os.system("echo \"0.001 0 0.001\" > ./"+fdirec+os.sep+"range_list")
+   os.system("echo \"0.05 0 0.05\" >> ./"+fdirec+os.sep+"range_list")
+   os.system("echo \"0.1 0 0.1\" >> ./"+fdirec+os.sep+"range_list")
+   os.system("echo \"0.2 0 0.2\" >> ./"+fdirec+os.sep+"range_list")
+   os.system("echo \"0.3 0 0.3\" >> ./"+fdirec+os.sep+"range_list")
+   os.system("echo \"0.4 0 0.4\" >> ./"+fdirec+os.sep+"range_list")
+   os.system("echo \"0.5 0 0.5\" >> ./"+fdirec+os.sep+"range_list")
+
+   os.system("./plink --bfile ./"+testdirec+os.sep+"test --score ./"+fdirec+os.sep+"Data.QC.Transformed 3 4 9 header --q-score-range ./"+fdirec+os.sep+"range_list ./"+fdirec+os.sep+"SNP.pvalue --extract ./"+fdirec+os.sep+"test.valid.snp --out ./"+fdirec+os.sep+"test")
+
+   os.system("./plink --bfile ./"+fdirec+os.sep+"test.QC --indep-pairwise 200 50 0.25 --out ./"+fdirec+os.sep+"test")
+   os.system("./plink --bfile ./"+fdirec+os.sep+"test.QC --extract ./"+fdirec+os.sep+"test.prune.in --pca 6 --out ./"+fdirec+os.sep+"test")
+
+
+ 
+   # Plink PRS
+   os.system("Rscript QCtarget.R  "+direc+" 4")
+   
+   #PRScice PRS
+   os.system("Rscript PRSice.R --prsice PRSice --base "+fdirec+os.sep+"Data.QC.gz --target "+fdirec+os.sep+"test.QC --thread 1 --print-snp --stat OR --binary-target T --out "+result+"/"+os.sep+"PRScice_PRS")
+   
+   #Lassosum PRS
+   os.system("Rscript QCtarget.R "+direc+" 6")
+   
+   
+ 
+   

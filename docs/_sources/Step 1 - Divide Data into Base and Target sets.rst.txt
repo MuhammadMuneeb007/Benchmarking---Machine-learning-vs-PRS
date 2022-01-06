@@ -1,0 +1,237 @@
+Step 1 - Divide Data into Base and Target sets
+======================================================================
+
+When calculating PRS, the GWAS summary statistic file is the Base file, a training set in Machine learning, whereas the Target file is a test set in machine learning.
+
+Code execution 
+------------------------
+
+.. code-block:: console
+
+   python dividedata.py (DirectoryName in which files will be stored)
+   For example: python dividedata.py 1
+   This function extracts the data from the previous step, divides it into training and test sets, and calculates the GWAS.
+
+Actual Code in dividedata.py
+--------------------------------
+
+
+.. code-block:: console
+
+   import pandas as pd
+   import os
+   from sklearn.model_selection import train_test_split
+   import sys
+
+   #def reformat():
+   #  pass
+   
+
+   #def subsubsection(pheno,direc,name):
+   #    case = pheno.loc[pheno["phenotype"]==1]  
+   #    control = pheno.loc[pheno["phenotype"]==0]
+   #    case.to_csv(direc+os.sep+name+"_case_id.txt", index=False, columns=['user_id'],header=False)
+   #    control.to_csv(direc+os.sep+name+"_control_id.txt", index=False, columns=['user_id'],header=False)
+   #    pheno.to_csv(direc+os.sep+name+"_id.txt", index=False, columns=['user_id'],header=False)
+   
+   
+   
+   def saveandformatsamplefile(top,bottom,direc):
+      ### Split test cases/controls and train cases/controls
+      ###make a phenotype file
+      #bottom['ID_2'] = 'sample_' + bottom['ID_2'].astype(str)
+      #bottom['ID_1'] = 'sample_' + bottom['ID_1'].astype(str)
+      
+      phenotype = pd.DataFrame()
+      phenotype["user_id"] = bottom["ID_1"].values
+      phenotype["phenotype"] = bottom["pheno"].values
+      phenotype.to_csv(direc+os.sep+"phenotype.csv",sep="\t",index=False)
+      
+      ###make covarite file
+      cov  = pd.DataFrame()
+      cov["FID"] = bottom["ID_2"].values
+      cov["IID"] = bottom["ID_1"].values
+      cov["Sex"] = 1
+      cov["cov1"] = bottom["sharedConfounder1_bin1"].values 
+      cov["cov2"] = bottom["independentConfounder2_cat_norm1"].values
+      cov["cov3"] = bottom["independentConfounder2_cat_norm2"].values
+      cov["cov4"] = bottom["independentConfounder3_cat_unif1"].values
+      sampletop  =  top.copy()
+      samplebottom = bottom.copy()
+
+      samplebottom["pheno"] = samplebottom["pheno"].apply(pd.to_numeric)
+      samplebottom.pheno[samplebottom['pheno']<0]=0
+      samplebottom.pheno[samplebottom['pheno']>0]=1
+      samplebottom["pheno"] = pd.to_numeric(samplebottom["pheno"],downcast='integer')
+      sample = pd.concat([sampletop, samplebottom], axis=0)
+      sample= sample.astype(str)
+      
+      
+      if "test" in direc:
+         subsubsection(phenotype,direc,"test")
+         sample.to_csv(direc+os.sep+"test_snptest.sample",index=False,sep=" ")
+      
+      if "train" in direc:
+         subsubsection(phenotype,direc,"train")
+         sample.to_csv(direc+os.sep+"train_snptest.sample",index=False,sep=" ")
+      
+      
+      
+      
+      
+      # Modify the cases/controls information because plink considers 1 as a control and 2 as a case, whereas other tools consider 0 as control and 1 as a case.
+      sample.pheno[sample['pheno']=='1']='2'
+      sample.pheno[sample['pheno']=='0']='1'
+
+      data = sample[["ID_1","ID_2","missing","pheno"]]
+      if "test" in direc:
+         data.to_csv(direc+os.sep+"test.sample",index=False,sep=" ")
+      
+      if "train" in direc:
+         data.to_csv(direc+os.sep+"train.sample",index=False,sep=" ")
+
+      samplebottom.pheno[samplebottom['pheno']==1]='2'
+      samplebottom.pheno[samplebottom['pheno']==0]='1'
+
+      cov["cov5"] = bottom["sharedConfounder4_norm1"].values
+      cov["cov6"] = bottom["independentConfounder4_norm1"].values
+      cov.to_csv(direc+os.sep+"YRI.covariate",index=False,sep="\t")
+      ###PRS phenotype
+      phenotype = pd.DataFrame()
+      phenotype["FID"] = bottom["ID_2"].values
+      phenotype["IID"] = bottom["ID_1"].values
+      phenotype["phenotype"] = bottom["pheno"].values
+      phenotype.to_csv(direc+os.sep+"YRI.pheno",sep="\t",index=False)
+      ###NewSample file
+      sample = pd.concat([top, bottom], axis=0)
+      sample = sample[['ID_1','ID_2',  'missing','pheno']]
+      sample.to_csv(direc+os.sep+"YRIs.sample",index=False,sep=" ")
+      return phenotype['FID'].values
+
+
+      
+   def splitsample(sample,direc):
+      # Extract the first row because it does not contain the sample information.
+      sampletop  = sample.head(1)
+      samplebottom = sample.tail(len(sample)-1)
+      
+      #Modify the sample ID's.
+      samplebottom['ID_1'] = samplebottom['ID_1'].astype(str)+str("_") + samplebottom['ID_1'].astype(str)
+      samplebottom['ID_2'] = samplebottom['ID_2'].astype(str)+str("_") + samplebottom['ID_2'].astype(str)
+      #samplebottom['ID_1'] = samplebottom['ID_1'].astype(str)
+      #samplebottom['ID_2'] = samplebottom['ID_2'].astype(str)
+
+      samplebottom["pheno"] = samplebottom["pheno"].apply(pd.to_numeric)
+      
+      #PhenotypeSimulator generates continuous phenotype, which we converted to binary phenotype by thresholding on 0.
+      samplebottom["pheno"].values[samplebottom["pheno"] < 0] = 0
+      samplebottom["pheno"].values[samplebottom["pheno"] > 0] = 1
+      samplebottom["pheno"] = pd.to_numeric(samplebottom["pheno"],downcast='integer')
+      
+      # Spit the samples. The default is 75 percent training and 25 percent test sets.
+      x_train, x_test, y_train, y_test = train_test_split(samplebottom, samplebottom["pheno"].values)
+      sampletop.iloc[0,9]="B"
+      
+      trainsample = saveandformatsamplefile(sampletop, x_train,direc+os.sep+"train")
+      testsample = saveandformatsamplefile(sampletop, x_test,direc+os.sep+"test")
+      return trainsample,testsample
+   
+   def commit(direc,name):
+      sample  = pd.read_csv(direc+os.sep+name+".sample",sep=" ")
+      samplebottom = sample.tail(len(sample)-1)
+      fam = pd.read_csv(direc+os.sep+name+".fam",sep="\s+",header=None)
+      fam[5] = samplebottom['pheno'].values
+      fam.to_csv(direc+os.sep+name+".fam",header=False,index=False, sep=" ")
+      
+ 
+
+   # Directory name in which files will be stored.
+   # Create four directories to contain train, test, and intermediate files.
+
+   direc = sys.argv[1]
+   if not os.path.isdir(direc):
+      os.mkdir(direc)
+   if not os.path.isdir(direc+os.sep+"test"):
+      os.mkdir(direc+os.sep+"test")
+   if not os.path.isdir(direc+os.sep+"train"):
+      os.mkdir(direc+os.sep+"train")  
+   if not os.path.isdir(direc+os.sep+"files"):
+      os.mkdir(direc+os.sep+"files")  
+
+   testdirec = direc+os.sep+"test"
+   traindirec = direc+os.sep+"train"
+   filesdirec = direc+os.sep+"files"
+
+   # Read the sample files, and ensure path is correct.
+   originalsamples = pd.read_csv("/l/proj/kuin0009/MuhammadMuneeb/mlvsprs/generatedata/CEU_merge/Ysim_snptest.sample",sep=" ")
+
+   # This function splits the samples into training and test sets.
+   train,test = splitsample(originalsamples,direc)
+
+   # Extract test samples using bcftools
+   os.system("bcftools view -S ./"+testdirec+os.sep+"test_id.txt /l/proj/kuin0009/MuhammadMuneeb/mlvsprs/generatedata/CEU_merge/X.vcf  > ./"+testdirec+os.sep+"test.vcf")
+   os.system(" ./plink --vcf ./"+testdirec+os.sep+"test.vcf --make-bed --out ./"+testdirec+os.sep+"test")
+   os.system("./plink --bfile  ./"+testdirec+os.sep+"test  --recode --tab --out ./"+testdirec+os.sep+"test")
+
+   # Extract training samples using bcftools
+   os.system("bcftools view -S ./"+traindirec+os.sep+"train_id.txt /l/proj/kuin0009/MuhammadMuneeb/mlvsprs/generatedata/CEU_merge/X.vcf  > ./"+traindirec+os.sep+"train.vcf")
+   os.system("./plink --vcf ./"+traindirec+os.sep+"train.vcf --make-bed  --out ./"+traindirec+os.sep+"train")
+
+   # Modify the fam file.
+   commit(testdirec,"test")
+   commit(traindirec,"train")
+
+   os.system("./plink --bfile  ./"+traindirec+os.sep+"train  --recode --tab --out ./"+traindirec+os.sep+"train")
+
+
+ 
+
+   # Calculate GWAS using plink
+   os.system("./plink --bfile ./"+traindirec+os.sep+"train --allow-no-sex --fisher --out ./"+traindirec+os.sep+"train")
+
+   # Calculate GWAS using Snptest
+   os.system("./gtool -P --ped ./"+traindirec+os.sep+"train.ped --map ./"+traindirec+os.sep+"train.map --og ./"+traindirec+os.sep+"train.gen --os ./"+traindirec+os.sep+"train_fake.sample")
+   os.system("bcftools convert ./"+traindirec+os.sep+"train.vcf  -g  ./"+traindirec+os.sep+"trains")
+   os.system("./snptest -data ./"+traindirec+os.sep+"trains.gen.gz ./"+traindirec+os.sep+"train_snptest.sample -o ./"+traindirec+os.sep+"train.sum -frequentist 1 -method score -pheno pheno")
+
+
+
+   snpteststats = pd.read_csv(traindirec+os.sep+"train.sum",sep=" ",low_memory=False,skiprows = 10)
+   snpteststats = snpteststats.head(len(snpteststats)-1)
+   plinkstats = pd.read_csv(traindirec+os.sep+"train.assoc.fisher",sep="\s+",low_memory=False)
+   gwasstats = pd.DataFrame()
+
+
+
+   # Change the column names as required by lassosum and plink.
+   # Ensure chromosome number is correct. We changed it in the later step.
+
+   gwasstats['CHR'] = ['0']*len(plinkstats)
+   gwasstats['BP'] = plinkstats['BP'].values
+   gwasstats['SNP'] = plinkstats['SNP'].values
+   gwasstats['A1'] = snpteststats['alleleA'].values
+   gwasstats['A2'] = snpteststats['alleleB'].values
+   gwasstats['N'] = snpteststats['all_total'].values
+   gwasstats['SE'] = snpteststats['frequentist_add_se_1'].values
+   gwasstats['P'] = plinkstats['P'].values
+   gwasstats['OR'] = plinkstats['OR'].values
+
+   # In simulated data, the imputation score is 1 as we have not used any imputation technique.
+   gwasstats['INFO'] = 1
+   gwasstats['MAF'] = snpteststats['all_maf'].values
+   #gwasstats.to_csv(traindirec+os.sep+"Data.txt.gz",index=False, sep="\t",compression='gzip')
+   gwasstats.to_csv(traindirec+os.sep+"Data.txt",index=False, sep="\t")
+
+
+
+
+
+
+
+
+
+
+
+
+
+

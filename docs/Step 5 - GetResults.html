@@ -1,0 +1,273 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Step 5 - GetResults &#8212; Benchmarking Polygenic Risk Scores vs. Machine Learning 1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Step 4 - MachineLearning" href="Step%204%20-%20MachineLearning.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="step-5-getresults">
+<h1>Step 5 - GetResults<a class="headerlink" href="#step-5-getresults" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="code-execution">
+<h2>Code execution<a class="headerlink" href="#code-execution" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python GetResults.py (DirectoryName in which files will be stored)</span>
+<span class="go">For example: python GetResults.py 1</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="actual-code-in-getresults">
+<h2>Actual Code in GetResults<a class="headerlink" href="#actual-code-in-getresults" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">import pandas as pd</span>
+<span class="go">import sys</span>
+<span class="go">import os</span>
+<span class="go">import glob</span>
+<span class="go">import shutil</span>
+<span class="go">import sys</span>
+<span class="go">import numpy as np</span>
+<span class="go">import scipy as sp</span>
+<span class="go">from scipy import stats</span>
+<span class="go">import matplotlib.pyplot as plt</span>
+<span class="go">from sklearn.metrics import roc_auc_score</span>
+<span class="go">import math</span>
+<span class="go">import matplotlib.pyplot as plt</span>
+<span class="go">import numpy as np</span>
+<span class="go">import scipy.stats as stats</span>
+<span class="go">import math</span>
+<span class="go">import matplotlib.pyplot as plt</span>
+<span class="go">from scipy.stats import norm</span>
+<span class="go">import statistics</span>
+<span class="go">import seaborn as sns</span>
+
+
+<span class="go">direc = sys.argv[1]</span>
+
+
+<span class="go">def NormalizeData(data):</span>
+<span class="go">   return (data - np.min(data)) / (np.max(data) - np.min(data))</span>
+<span class="go">def calculateAUCPRScice(direc):</span>
+<span class="go">   best = pd.read_csv(direc+os.sep+&quot;result&quot;+os.sep+&quot;PRScice_PRS.best&quot;,sep=&quot;\s+&quot;)</span>
+<span class="go">   pheno = pd.read_csv(direc+os.sep+&quot;/test/YRI.pheno&quot;,sep=&quot;\s+&quot;)</span>
+
+
+
+<span class="go">   temp = NormalizeData(best[&quot;PRS&quot;].values)</span>
+<span class="go">   best[&quot;PRS&quot;] = NormalizeData(np.array(best[&quot;PRS&quot;].values))</span>
+
+<span class="go">   best[&quot;PRS&quot;].values[best[&quot;PRS&quot;] &gt;=0.5] = 1</span>
+<span class="go">   best[&quot;PRS&quot;].values[best[&quot;PRS&quot;] &lt; 0.5] = 0</span>
+
+
+<span class="go">   print(&quot;AUC&quot;,roc_auc_score(np.array(best[&quot;PRS&quot;].values), np.array(pheno[&#39;phenotype&#39;].values)))</span>
+<span class="go">   a= best[&quot;PRS&quot;].values</span>
+<span class="go">   b = pheno[&#39;phenotype&#39;].values</span>
+<span class="go">   accuracy = len([a[i] for i in range(0, len(a)) if a[i] == b[i]]) / len(a)</span>
+<span class="go">   print(&quot;Accuracy&quot;,accuracy)</span>
+<span class="go">   return temp</span>
+
+
+<span class="go">def calculateAUCPlink(direc):</span>
+<span class="go">   pheno = pd.read_csv(direc+os.sep+&quot;/test/YRI.pheno&quot;,sep=&quot;\s+&quot;)</span>
+<span class="go">   files = os.listdir(direc+os.sep+&quot;files&quot;)</span>
+<span class="go">   maxxacc=0</span>
+<span class="go">   maxauc = 0</span>
+<span class="go">   profile = &quot;&quot;</span>
+<span class="go">   temp = []</span>
+<span class="go">   for loop in files:</span>
+
+<span class="go">      if &quot;.profile&quot; in loop:</span>
+<span class="gp">         #</span> Find AUC <span class="k">for</span> all profiles.
+<span class="go">         best = pd.read_csv(direc+os.sep+&quot;files&quot;+os.sep+loop,sep=&quot;\s+&quot;)</span>
+<span class="go">         best[&quot;SCORE&quot;] = NormalizeData(best[&quot;SCORE&quot;].values)</span>
+<span class="go">         best[&quot;SCORE&quot;].values[best[&quot;SCORE&quot;] &gt;=0.5] = 1</span>
+<span class="go">         best[&quot;SCORE&quot;].values[best[&quot;SCORE&quot;] &lt; 0.5] = 0</span>
+
+<span class="go">         if maxauc&lt;roc_auc_score(best[&quot;SCORE&quot;].values, pheno[&#39;phenotype&#39;].values):</span>
+<span class="go">            maxauc = roc_auc_score(best[&quot;SCORE&quot;].values, pheno[&#39;phenotype&#39;].values)</span>
+<span class="go">            temp = NormalizeData(pd.read_csv(direc+os.sep+&quot;files&quot;+os.sep+loop,sep=&quot;\s+&quot;)[&quot;SCORE&quot;].values)</span>
+<span class="go">            profile = loop</span>
+<span class="go">            a= best[&quot;SCORE&quot;].values</span>
+<span class="go">            b = pheno[&#39;phenotype&#39;].values</span>
+<span class="go">            accuracy = len([a[i] for i in range(0, len(a)) if a[i] == b[i]]) / len(a)</span>
+<span class="go">            maxxacc = accuracy</span>
+<span class="go">   print(&quot;AUC&quot;,maxauc)</span>
+<span class="go">   print(&quot;Accuracy&quot;,maxxacc)</span>
+<span class="go">   print(&quot;Profile&quot;, profile)</span>
+<span class="go">   return temp</span>
+
+<span class="go">def calculateAUClasso(direc):</span>
+<span class="go">   best = pd.read_csv(direc+os.sep+&quot;result&quot;+os.sep+&quot;test.txt&quot;,sep=&quot;\s+&quot;,header=None)</span>
+<span class="go">   pheno = pd.read_csv(direc+os.sep+&quot;/test/YRI.pheno&quot;,sep=&quot;\s+&quot;)</span>
+
+
+<span class="go">   best[0] = NormalizeData(best[0].values)</span>
+<span class="go">   temp = NormalizeData(best[0].values)</span>
+<span class="go">   best[0].values[best[0] &gt;=0.5] = 1</span>
+<span class="go">   best[0].values[best[0] &lt; 0.5] = 0</span>
+
+<span class="go">   print(&quot;AUC&quot;,roc_auc_score(best[0].values, pheno[&#39;phenotype&#39;].values))</span>
+<span class="go">   a= best[0].values</span>
+<span class="go">   b = pheno[&#39;phenotype&#39;].values</span>
+<span class="go">   accuracy = len([a[i] for i in range(0, len(a)) if a[i] == b[i]]) / len(a)</span>
+<span class="go">   print(&quot;Accuracy&quot;,accuracy)</span>
+<span class="go">   return temp</span>
+
+<span class="go">def calculateAUCMachineLearning(direc):</span>
+<span class="go">   pheno = pd.read_csv(direc+os.sep+&quot;/test/YRI.pheno&quot;,sep=&quot;\s+&quot;)</span>
+
+<span class="go">   files = os.listdir(direc)</span>
+<span class="go">   maxxacc=0</span>
+<span class="go">   maxauc = 0</span>
+<span class="go">   profile = &quot;&quot;</span>
+<span class="go">   temp = []</span>
+<span class="go">   for loop in files:</span>
+<span class="gp">      #</span> Find AUC <span class="k">for</span> all p-values and machine learning.
+<span class="go">      if &quot;pv_&quot; in loop:</span>
+<span class="go">         best = pd.read_csv(direc+os.sep+loop+os.sep+&quot;ML_probability&quot;,sep=&quot;\s+&quot;,header=None)</span>
+<span class="gp">         #</span>plt.hist<span class="o">(</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span>.values<span class="o">)</span>
+<span class="gp">         #</span>plt.show<span class="o">()</span>
+
+<span class="gp">         #</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span>.values<span class="o">[</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span> &gt;<span class="o">=</span> sum<span class="o">(</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span>.values<span class="o">)</span>/len<span class="o">(</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span>.values<span class="o">)]</span> <span class="o">=</span> <span class="m">1</span>
+<span class="gp">         #</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span>.values<span class="o">[</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span> &lt; sum<span class="o">(</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span>.values<span class="o">)</span>/len<span class="o">(</span>best<span class="o">[</span><span class="s2">&quot;PRS&quot;</span><span class="o">]</span>.values<span class="o">)]</span> <span class="o">=</span> <span class="m">0</span>
+<span class="go">         best[0] = NormalizeData(best[0].values)</span>
+
+<span class="go">         best[0].values[best[0] &gt;=0.5] = 1</span>
+<span class="go">         best[0].values[best[0] &lt; 0.5] = 0</span>
+
+<span class="go">         if maxauc&lt;roc_auc_score(best[0].values, pheno[&#39;phenotype&#39;].values):</span>
+<span class="go">            maxauc = roc_auc_score(best[0].values, pheno[&#39;phenotype&#39;].values)</span>
+<span class="go">            temp = NormalizeData(pd.read_csv(direc+os.sep+loop+os.sep+&quot;ML_probability&quot;,sep=&quot;\s+&quot;,header=None)[0].values)</span>
+<span class="go">            profile = loop</span>
+<span class="go">            a= best[0].values</span>
+<span class="go">            b = pheno[&#39;phenotype&#39;].values</span>
+<span class="go">            accuracy = len([a[i] for i in range(0, len(a)) if a[i] == b[i]]) / len(a)</span>
+<span class="go">            maxxacc = accuracy</span>
+<span class="go">   print(&quot;AUC&quot;,maxauc)</span>
+<span class="go">   print(&quot;Accuracy&quot;,maxxacc)</span>
+<span class="go">   print(&quot;Profile&quot;, profile)</span>
+<span class="go">   return temp</span>
+
+<span class="go">x = calculateAUCPRScice(direc)</span>
+<span class="go">n_samples = len(x)</span>
+<span class="go">rng = np.random.RandomState(0)</span>
+<span class="go">x = sns.distplot(x,hist=False,color=&#39;y&#39;)</span>
+
+<span class="go">x = calculateAUCPlink(direc)</span>
+<span class="go">x = sns.distplot(x,hist=True,color = &#39;r&#39;)</span>
+
+<span class="go">x = calculateAUClasso(direc)</span>
+<span class="go">x = sns.distplot(x, hist=True,color=&#39;g&#39;)</span>
+
+
+<span class="go">x = calculateAUCMachineLearning(direc)</span>
+<span class="go">x = sns.distplot(x, hist=True,color=&#39;b&#39;)</span>
+
+<span class="go">x.figure.legend(labels=[&#39;PRScice&#39;,&#39;Plink&#39;,&#39;Lassosum&#39;,&#39;Machine Learning&#39;])</span>
+<span class="go">x.figure.savefig(direc+os.sep+&quot;result&quot;+os.sep+&quot;output.png&quot;)</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Benchmarking Polygenic Risk Scores vs. Machine Learning</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="Step%200%20-%20Generate%20Data.html">Step 0 - Generate Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%201%20-%20Divide%20Data%20into%20Base%20and%20Target%20sets.html">Step 1 - Divide Data into Base and Target sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%202%20-%20CalculatePRS.html">Step 2 - CalculatePRS</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%202.0%20-%20QCTarget.R.html">Step 2.0 - QCTarget.R</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%203%20-%20Pvaluethreshold.html">Step 3 - Pvaluethreshold</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%204%20-%20MachineLearning.html">Step 4 - MachineLearning</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Step 5 - GetResults</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#code-execution">Code execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#actual-code-in-getresults">Actual Code in GetResults</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="Step%204%20-%20MachineLearning.html" title="previous chapter">Step 4 - MachineLearning</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Muhammad Muneeb and Samuel F. Feng.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.2.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/Step 5 - GetResults.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

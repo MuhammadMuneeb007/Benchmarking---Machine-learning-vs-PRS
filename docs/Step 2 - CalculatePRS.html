@@ -1,0 +1,254 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Step 2 - CalculatePRS &#8212; Benchmarking Polygenic Risk Scores vs. Machine Learning 1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Step 2.0 - QCTarget.R" href="Step%202.0%20-%20QCTarget.R.html" />
+    <link rel="prev" title="Step 1 - Divide Data into Base and Target sets" href="Step%201%20-%20Divide%20Data%20into%20Base%20and%20Target%20sets.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="step-2-calculateprs">
+<h1>Step 2 - CalculatePRS<a class="headerlink" href="#step-2-calculateprs" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="code-execution">
+<h2>Code execution<a class="headerlink" href="#code-execution" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python CalculatePRS.py (DirectoryName in which files will be stored)</span>
+<span class="go">For example: python CalculatePRS.py 1</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="actual-code-in-calculateprs-py">
+<h2>Actual Code in CalculatePRS.py<a class="headerlink" href="#actual-code-in-calculateprs-py" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">import pandas as pd</span>
+<span class="go">import os</span>
+<span class="go">import glob</span>
+<span class="go">import numpy as np</span>
+<span class="go">import shutil</span>
+<span class="go">import sys</span>
+<span class="go">import numpy as np</span>
+<span class="go">import scipy as sp</span>
+<span class="go">from scipy import stats</span>
+<span class="go">import matplotlib.pyplot as plt</span>
+<span class="go">import os</span>
+<span class="go">import pandas as pd</span>
+<span class="go">import numpy as np</span>
+<span class="go">from sklearn.metrics import roc_auc_score</span>
+<span class="go">import math</span>
+<span class="go">direc = sys.argv[1]</span>
+
+
+
+<span class="go">traindirec = direc+os.sep+&quot;train&quot;</span>
+<span class="go">testdirec =direc+os.sep+&quot;test&quot;</span>
+<span class="go">result = direc+os.sep+&quot;result&quot;</span>
+<span class="go">fdirec = direc+os.sep+&quot;files&quot;</span>
+
+<span class="go">if not os.path.isdir(direc+os.sep+&quot;files&quot;):</span>
+<span class="go">   os.mkdir(direc+os.sep+&quot;files&quot;)</span>
+<span class="go">if not os.path.isdir(direc+os.sep+&quot;result&quot;):</span>
+<span class="go">   os.mkdir(direc+os.sep+&quot;result&quot;)</span>
+
+<span class="go">def changeIDS(direct):</span>
+<span class="go">   data = pd.read_csv(direct, sep=&quot;\s+&quot;,index_col=False)</span>
+<span class="go">   data[&#39;FID&#39;] = data[&#39;FID&#39;].str.split(&#39;_&#39;).str[0]</span>
+<span class="go">   data[&#39;IID&#39;] = data[&#39;IID&#39;].str.split(&#39;_&#39;).str[0]</span>
+<span class="go">   data.to_csv(direct,sep=&quot;\t&quot;,index=False)</span>
+
+<span class="gp">#</span> Modify the bim file <span class="k">for</span> the <span class="nb">test</span> data.
+<span class="go">bimfile = pd.read_csv(testdirec+os.sep+&quot;test.bim&quot;,header=None,sep=&quot;\s+&quot;)</span>
+<span class="go">bimfile[0] = 21</span>
+<span class="go">bimfile[2] = list(range(1,len(bimfile)+1))</span>
+<span class="go">bimfile.to_csv(testdirec+os.sep+&quot;test.bim&quot;,header=False, index=False, sep=&quot;\t&quot;)</span>
+
+<span class="gp">#</span> Modify the GWAS file, and use the correct chromosome number <span class="k">for</span> each SNP.
+<span class="go">data = pd.read_csv(traindirec+os.sep+&quot;Data.txt&quot;,sep=&quot;\s+&quot;)</span>
+<span class="go">data[&#39;CHR&#39;]=21</span>
+<span class="go">data.to_csv(traindirec+os.sep+&quot;Data.txt.gz&quot;, index=False, sep=&quot;\t&quot;,compression=&#39;gzip&#39;)</span>
+
+<span class="go">changeIDS(testdirec+os.sep+&quot;YRI.covariate&quot;)</span>
+<span class="go">changeIDS(testdirec+os.sep+&quot;YRI.pheno&quot;)</span>
+
+<span class="go">changeIDS(traindirec+os.sep+&quot;YRI.covariate&quot;)</span>
+<span class="go">changeIDS(traindirec+os.sep+&quot;YRI.pheno&quot;)</span>
+</pre></div>
+</div>
+<p>The code segments afterward are taken from this <a class="reference external" href="https://choishingwan.github.io/PRS-Tutorial/base/">Tutorial</a>.
+At this point, the dataset is ready such that the code provided in the tutorial can be applied to it.
+We just automated all the steps, and we strongly recommend looking at that tutorial for understanding.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">os.system(&quot;gunzip -c ./&quot;+traindirec+os.sep+&quot;Data.txt.gz | awk &#39;NR==1 || ($11 &gt; 0.01) &amp;&amp; ($10 &gt; 0.8) {print}&#39; | gzip  &gt; ./&quot;+fdirec+os.sep+&quot;Data.gz&quot;)</span>
+<span class="go">os.system(&quot;gunzip -c ./&quot;+fdirec+os.sep+&quot;Data.gz | awk &#39;{seen[$3]++; if(seen[$3]==1){ print}}&#39; | gzip -&gt; ./&quot;+fdirec+os.sep+&quot;Data.nodup.gz&quot;)</span>
+<span class="go">os.system(&quot;gunzip -c ./&quot;+fdirec+os.sep+&quot;Data.nodup.gz | awk &#39;!( ($4==\&quot;A\&quot; &amp;&amp; $5==\&quot;T\&quot;) || ($4==\&quot;T\&quot; &amp;&amp; $5==\&quot;A\&quot;) || ($4==\&quot;G\&quot; &amp;&amp; $5==\&quot;C\&quot;) || ($4==\&quot;C\&quot; &amp;&amp; $5==\&quot;G\&quot;)) {print}&#39; | gzip &gt; ./&quot;+fdirec+os.sep+&quot;Data.QC.gz&quot;)</span>
+
+<span class="gp">#</span><span class="c1">##QC-TargetFile</span>
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --maf 0.01 --hwe 1e-6 --geno 0.01 --mind 0.01 --write-snplist --make-just-fam --allow-no-sex -out ./&quot;+fdirec+os.sep+&quot;test.QC&quot;)</span>
+
+
+
+
+<span class="gp">#</span><span class="c1">##This will work for alot of variants.</span>
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --keep ./&quot;+fdirec+os.sep+&quot;test.QC.fam --extract ./&quot;+fdirec+os.sep+&quot;test.QC.snplist --allow-no-sex --indep-pairwise 200 50 0.25 --out ./&quot;+fdirec+os.sep+&quot;test.QC&quot;)</span>
+
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --extract ./&quot;+fdirec+os.sep+&quot;test.QC.prune.in --keep ./&quot;+fdirec+os.sep+&quot;test.QC.fam --het --out ./&quot;+fdirec+os.sep+&quot;test.QC&quot;)</span>
+
+
+<span class="go">os.system(&quot;Rscript QCtarget.R &quot;+direc+&quot; 1&quot;)</span>
+<span class="go">print(&quot;Rscript QCtarget.R  1&quot;)</span>
+
+
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --extract ./&quot;+testdirec+os.sep+&quot;test.QC.prune.in --keep ./&quot;+testdirec+os.sep+&quot;test.valid.sample --out ./&quot;+testdirec+os.sep+&quot;test.QC&quot;)</span>
+<span class="gp">#</span>exit<span class="o">(</span><span class="m">0</span><span class="o">)</span>
+
+<span class="gp">#</span><span class="c1">##If sex information is present then use this. Simulated data does not contain the sex information so, we ignored it.</span>
+
+<span class="go">&#39;&#39;&#39;</span>
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --extract ./&quot;+fdirec+os.sep+&quot;test.QC.prune.in --keep ./&quot;+fdirec+os.sep+&quot;test.valid.sample --check-sex --out ./&quot;+fdirec+os.sep+&quot;test.QC&quot;)</span>
+<span class="go">os.system(&quot;Rscript QCtarget.R &quot;+direc+&quot; 2&quot;)</span>
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --extract ./&quot;+fdirec+os.sep+&quot;test.QC.prune.in --keep ./&quot;+fdirec+os.sep+&quot;test.QC.valid --rel-cutoff 0.125 --out ./&quot;+fdirec+os.sep+&quot;test.QC&quot;)</span>
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --make-bed --allow-no-sex --allow-no-vars --keep ./&quot;+fdirec+os.sep+&quot;test.QC.rel.id --out ./&quot;+fdirec+os.sep+&quot;test.QC --extract ./&quot;+fdirec+os.sep+&quot;test.QC.snplist --exclude ./&quot;+fdirec+os.sep+&quot;test.mismatch --a1-allele ./&quot;+fdirec+os.sep+&quot;EUR.a1&quot;)</span>
+<span class="go">&#39;&#39;&#39;</span>
+<span class="gp">#</span><span class="c1">#Mismatch information</span>
+<span class="gp">#</span>When information is correct.
+<span class="gp">#</span>os.system<span class="o">(</span><span class="s2">&quot;./plink --bfile ./&quot;</span>+testdirec+os.sep+<span class="s2">&quot;test --make-bed --allow-no-sex  --out ./&quot;</span>+fdirec+os.sep+<span class="s2">&quot;test.QC --extract ./&quot;</span>+fdirec+os.sep+<span class="s2">&quot;test.QC.snplist --exclude ./&quot;</span>+fdirec+os.sep+<span class="s2">&quot;test.mismatch --a1-allele ./&quot;</span>+fdirec+os.sep+<span class="s2">&quot;test.a1&quot;</span><span class="o">)</span>
+
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --make-bed --allow-no-sex  --out ./&quot;+fdirec+os.sep+&quot;test.QC --extract ./&quot;+fdirec+os.sep+&quot;test.QC.snplist  --a1-allele ./&quot;+fdirec+os.sep+&quot;test.a1&quot;)</span>
+
+
+<span class="gp">#</span><span class="c1">##Make final files</span>
+
+<span class="go">os.system(&quot;Rscript QCtarget.R  &quot;+direc+&quot;  3&quot;)</span>
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --clump-p1 1 --clump-r2 0.1 --clump-kb 250 --clump ./&quot;+fdirec+os.sep+&quot;Data.QC.Transformed --clump-snp-field SNP --clump-field P --out ./&quot;+fdirec+os.sep+&quot;test&quot;)</span>
+
+<span class="go">os.system(&quot;awk &#39;NR!=1{print $3}&#39; ./&quot;+fdirec+os.sep+&quot;test.clumped &gt;  ./&quot;+fdirec+os.sep+&quot;test.valid.snp&quot;)</span>
+<span class="go">os.system(&quot;awk &#39;{print $3,$8}&#39; ./&quot;+fdirec+os.sep+&quot;Data.QC.Transformed &gt;  ./&quot;+fdirec+os.sep+&quot;SNP.pvalue&quot;)</span>
+
+<span class="go">os.system(&quot;echo \&quot;0.001 0 0.001\&quot; &gt; ./&quot;+fdirec+os.sep+&quot;range_list&quot;)</span>
+<span class="go">os.system(&quot;echo \&quot;0.05 0 0.05\&quot; &gt;&gt; ./&quot;+fdirec+os.sep+&quot;range_list&quot;)</span>
+<span class="go">os.system(&quot;echo \&quot;0.1 0 0.1\&quot; &gt;&gt; ./&quot;+fdirec+os.sep+&quot;range_list&quot;)</span>
+<span class="go">os.system(&quot;echo \&quot;0.2 0 0.2\&quot; &gt;&gt; ./&quot;+fdirec+os.sep+&quot;range_list&quot;)</span>
+<span class="go">os.system(&quot;echo \&quot;0.3 0 0.3\&quot; &gt;&gt; ./&quot;+fdirec+os.sep+&quot;range_list&quot;)</span>
+<span class="go">os.system(&quot;echo \&quot;0.4 0 0.4\&quot; &gt;&gt; ./&quot;+fdirec+os.sep+&quot;range_list&quot;)</span>
+<span class="go">os.system(&quot;echo \&quot;0.5 0 0.5\&quot; &gt;&gt; ./&quot;+fdirec+os.sep+&quot;range_list&quot;)</span>
+
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+testdirec+os.sep+&quot;test --score ./&quot;+fdirec+os.sep+&quot;Data.QC.Transformed 3 4 9 header --q-score-range ./&quot;+fdirec+os.sep+&quot;range_list ./&quot;+fdirec+os.sep+&quot;SNP.pvalue --extract ./&quot;+fdirec+os.sep+&quot;test.valid.snp --out ./&quot;+fdirec+os.sep+&quot;test&quot;)</span>
+
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+fdirec+os.sep+&quot;test.QC --indep-pairwise 200 50 0.25 --out ./&quot;+fdirec+os.sep+&quot;test&quot;)</span>
+<span class="go">os.system(&quot;./plink --bfile ./&quot;+fdirec+os.sep+&quot;test.QC --extract ./&quot;+fdirec+os.sep+&quot;test.prune.in --pca 6 --out ./&quot;+fdirec+os.sep+&quot;test&quot;)</span>
+
+
+
+<span class="gp">#</span> Plink PRS
+<span class="go">os.system(&quot;Rscript QCtarget.R  &quot;+direc+&quot; 4&quot;)</span>
+
+<span class="gp">#</span>PRScice PRS
+<span class="go">os.system(&quot;Rscript PRSice.R --prsice PRSice --base &quot;+fdirec+os.sep+&quot;Data.QC.gz --target &quot;+fdirec+os.sep+&quot;test.QC --thread 1 --print-snp --stat OR --binary-target T --out &quot;+result+&quot;/&quot;+os.sep+&quot;PRScice_PRS&quot;)</span>
+
+<span class="gp">#</span>Lassosum PRS
+<span class="go">os.system(&quot;Rscript QCtarget.R &quot;+direc+&quot; 6&quot;)</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Benchmarking Polygenic Risk Scores vs. Machine Learning</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="Step%200%20-%20Generate%20Data.html">Step 0 - Generate Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%201%20-%20Divide%20Data%20into%20Base%20and%20Target%20sets.html">Step 1 - Divide Data into Base and Target sets</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Step 2 - CalculatePRS</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#code-execution">Code execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#actual-code-in-calculateprs-py">Actual Code in CalculatePRS.py</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="Step%202.0%20-%20QCTarget.R.html">Step 2.0 - QCTarget.R</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%203%20-%20Pvaluethreshold.html">Step 3 - Pvaluethreshold</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%204%20-%20MachineLearning.html">Step 4 - MachineLearning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Step%205%20-%20GetResults.html">Step 5 - GetResults</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="Step%201%20-%20Divide%20Data%20into%20Base%20and%20Target%20sets.html" title="previous chapter">Step 1 - Divide Data into Base and Target sets</a></li>
+      <li>Next: <a href="Step%202.0%20-%20QCTarget.R.html" title="next chapter">Step 2.0 - QCTarget.R</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Muhammad Muneeb and Samuel F. Feng.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.2.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/Step 2 - CalculatePRS.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
