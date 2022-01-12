@@ -18,5 +18,212 @@ Dataset
    7. X.vcf (Same data in VCF file format so, bcftools can easily process it)
    
    
+Dataset generation process
+----------------------------
+
+.. code-block:: console
+
  
+   Following files and directories are required to generate the dataset.
+   1. CEU_merge (Directory which contains the merged files)
+   2. generate.py  (Python script to generate data from Hapgen2)
+   3. gtool/plink  (Tools for processing)
+   4. merge.py  (Code for merging in python)
+   5. merge.sh  (Bash script to deploy on HPC)
+   6. people.txt  (List of directories in which sub-datasets should be stored. Numbered as 1, 2, 3, 4, 5 etc.)
+   7. rawdata  (Contains Hapgen2 files)
+   8. sample.R  (Rscript to generate PhenotypeSimulator data)
+   9. sample.sh (Script to generate Hapgen2 and PhenotypeSimulator)
+   10 CEU_1, CEU_2, CEU_3, and CEU_4 (Files that contain PhenotypeSimulator data) 
+
+Dataset generation - sample.R
+------------------------------
+
+.. code-block:: console
+
+   # Required package. Kindly download the dependent packages
+   require("PhenotypeSimulator")
+   args = commandArgs(trailingOnly=TRUE)
+   start_time <- Sys.time()
+
+   # Number of people for which data is generated
+   numberofPeople = 1500
+   filem <-paste("CEU",strtoi(args[1]),sep="_")
+   filem <-paste(filem,"gen",sep=".")
+
+   #Path to rawdata which contains the Hapgen2 data.
+   filem <-paste("/l/proj/kuin0009/MuhammadMuneeb/mlvsprs/generatedata/rawdata/",filem,sep="/")
+
+   genotypefile <- system.file("extdata/genotypes/hapgen",
+                                 filem,
+                                 package = "PhenotypeSimulator")
+
+   genotypefile <- gsub("\\.gen","", filem)
    
+   # Ensure correct file is read.
+   print(genotypefile)
+
+   # Paramters to change the genetic variation.
+   genVar <- 0.6
+   noiseVar <- 1 - genVar
+   totalSNPeffect <- 0.01
+   h2s <- totalSNPeffect/genVar
+   phi <- 0.6
+   rho <- 0.1
+   delta <- 0.3
+   shared <- 0.8
+   independent <- 1 - shared
+
+
+   phenotype <- runSimulation(N = numberofPeople, P = 1, genotypefile = genotypefile,
+                              format = "oxgen", cNrSNP = 5, genVar = genVar, h2s = h2s,
+                              phi = 0.6, delta = 0.3, distBetaGenetic = "unif", mBetaGenetic = 0.5,
+                              sdBetaGenetic = 1, NrFixedEffects = 4, NrConfounders = c(1, 2, 1, 2), pIndependentConfounders = c(0, 1, 1, 0.5),
+                              distConfounders = c("bin", "cat_norm", "cat_unif", "norm"),
+                              probConfounders = 0.2, catConfounders = c(3, 4), pcorr = 0.8,
+                              verbose = FALSE, seed = 3000)
+
+   result <-paste("CEU",strtoi(args[1]),sep="_")
+   
+   # Save output in a specific format.
+   out <- savePheno(phenotype, directory=getwd(),
+                     outstring=result,
+                     format=c("csv", "snptest"), verbose=FALSE)
+
+Dataset generation - generate.py
+-----------------------------------
+
+.. code-block:: console
+
+   import os
+   import sys
+   import time
+
+   # Directory in which files will be saved.
+   filename = str(sys.argv[1])
+
+   # Place 1000 Genome + Hapmap3 (CEU, Chromosome 21) data in R/library/PhenotypeSimulator/extdata/genotypes/hapgen
+   ps = "/home/kunet.ae/ku500519/anaconda3/envs/R_test/lib/R/library/PhenotypeSimulator/extdata/genotypes/hapgen"
+   
+   # Destination folder
+   dest ="/l/proj/kuin0009/MuhammadMuneeb/mlvsprs/generatedata/rawdata"
+   
+   # Read information on this link to generate data from Hapgen2 https://mathgen.stats.ox.ac.uk/genetics_software/hapgen/hapgen2.html
+   os.system(ps+os.sep+"/hapgen2 -m "+ps+os.sep+"CEU.map -l "+ps+os.sep+"CEU.leg -h "+ps+os.sep+"CEU.haps -o "+dest+os.sep+"CEU_"+str(filename)+" -dl 43351827 0 0 0 -n 1500 0")
+   
+   # Rename the files to process them easily
+   os.rename(dest+os.sep+"CEU_"+str(filename)+".controls.gen",dest+os.sep+"CEU_"+str(filename)+".gen")
+   os.rename(dest+os.sep+"CEU_"+str(filename)+".controls.sample",dest+os.sep+"CEU_"+str(filename)+".sample")
+
+
+Dataset generation - sample.sh
+------------------------------
+
+This file contains the code to deploy the data generation process on High-performance computing (HPC)
+
+
+.. code-block:: console
+
+   #!/bin/sh
+   #SBATCH --nodes=1
+   #SBATCH --ntasks-per-node=52
+   #SBATCH --job-name=PSBenchmark
+   #SBATCH --time=24:00:00
+   #SBATCH --mem=300000MB
+   #SBATCH --partition=prod
+   #SBATCH --account=kuin0009
+   #SBATCH --output=PSBenchmark.%A_%a.out
+   #SBATCH --error=PSBenchmark.%A_%a.err
+   #SBATCH --array=1-5
+
+
+   module purge
+   module load miniconda/3
+
+   # Read the directory name from the file, "people.txt"
+   radius=$(head -n $SLURM_ARRAY_TASK_ID people.txt | tail -n 1)
+   
+   # Generate data from HAPGEN2
+   python generate.py $radius
+   
+   #PASS data to PhenotypeSimulator
+   Rscript sample.R $radius
+
+
+Dataset generation - people.txt
+---------------------------------
+
+.. code-block:: console
+
+   1
+   2
+   3
+   4
+   5
+
+Dataset generation - sample.R
+------------------------------
+
+.. code-block:: console
+
+   #!/bin/bash
+   #SBATCH --nodes=1
+   #SBATCH --ntasks-per-node=20
+   #SBATCH --job-name=Merge-90000
+   #SBATCH --time=48:00:00
+   #SBATCH --mem=100000MB
+   #SBATCH --partition=prod
+   #SBATCH --account=kuin0009
+   #SBATCH --output=merge.%A_%a.out
+   #SBATCH --error=merge.%A_%a.err
+   #SBATCH --array=1-1
+
+
+   module purge
+   module load miniconda/3
+
+   # Merge files
+   python merge.py
+   
+   # Process the final files and save them in VCF file format.
+   ./gtool -G --g ./CEU_merge/Genotypes_snptest.gen --s ./CEU_merge/Ysim_snptest.sample --ped ./CEU_merge/X.ped --map ./CEU_merge/X.map --phenotype pheno
+   ./plink -file ./CEU_merge/X --recode vcf --out ./CEU_merge/X
+
+Dataset generation - merge.py
+------------------------------
+
+.. code-block:: console
+
+   import os
+   import pandas as pd
+
+   files = os.listdir("./")
+   os.mkdir("CEU_merge")
+   data = pd.DataFrame()
+   gendata = pd.DataFrame()
+   count=0
+   for direc in files:
+      # Read directories on in this format, CEU_NUMBER like CEU_1
+      if "CEU_merge" not in direc and "rawdata" not in direc and os.path.isdir(direc) and "CEU" in direc:
+         df2 = pd.read_csv(direc+os.sep+"Ysim_snptest.sample",sep=" ")
+         sampletop = df2.head(1)
+         samplebottom = df2.tail(len(df2)-1)
+         data = pd.concat([samplebottom,data],axis=0)
+         gen = pd.read_csv(direc+os.sep+"Genotypes_snptest.gen",sep = " ",header=None)
+         frontgen = gen[[0, 1, 2, 3 , 4]]
+         gen = gen.drop(0, axis=1)
+         gen = gen.drop(1,axis=1)
+         gen = gen.drop(2,axis=1)
+         gen = gen.drop(3,axis=1)
+         gen = gen.drop(4,axis=1)
+         gendata = pd.concat([gendata,gen],axis=1,ignore_index=True)
+         print("Merged",str(count))
+         count=count+1
+         os.mkdir(str(count))
+      gendata = pd.concat([frontgen,gendata],axis=1)
+      gendata.to_csv("CEU_merge"+os.sep+"Genotypes_snptest.gen",index=False,header=False,sep= " ")
+      data['ID_1'] = range(1,len(data)+1)
+      data['ID_2'] = range(1,len(data)+1)
+
+   data = pd.concat([sampletop,data],axis=0)
+   data.to_csv("CEU_merge"+os.sep+"Ysim_snptest.sample",index=False, sep=" ")
